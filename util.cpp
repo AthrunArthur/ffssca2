@@ -1,5 +1,5 @@
 #include "defs.h"
-
+#include <chrono>
 
 
 void prefix_sums(LONG_T *input, LONG_T* result, LONG_T* p, LONG_T n) {
@@ -55,4 +55,15 @@ void prefix_sums(LONG_T *input, LONG_T* result, LONG_T* p, LONG_T n) {
 
 #endif
 
+}
+int count_elapse_microsecond(const std::function<void ()> & f)
+{
+    using namespace std::chrono;
+
+    time_point<system_clock> start, end;
+
+    start = system_clock::now();
+    f();
+    end = system_clock::now();
+    return duration_cast<microseconds>(end-start).count();
 }

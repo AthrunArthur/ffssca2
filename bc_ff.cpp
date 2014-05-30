@@ -3,11 +3,13 @@
 #include "sprng.h"
 #include "utils.h"
 #include <chrono>
-#include <ff.h>
-using ff::scope_guard;
+#include "ff.h"
+
+using namespace ff;
 
 
-boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
+
+boost::shared_ptr<DOUBLE_T[]>  ff_get_bc(graph g)
 {
     int seed = 2387;
     int tid = 0;
@@ -23,30 +25,26 @@ boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
         free(sprng_stream);
     });
 
+    std::cout<<"fuck 0"<<std::endl;
     using namespace std::chrono;
     time_point<system_clock> time_start, time_end;
     time_start = system_clock::now();
 
     int numV = 1<<g.k4approx;
-    LONG_T start, end;
+    typedef boost::shared_ptr<ff::accumulator<DOUBLE_T> > fake_bc_ptr;
+    std::vector<fake_bc_ptr> bcs;
     auto srcs = boost::shared_ptr<LONG_T[]>(new LONG_T[g.n]);
-    auto sig = boost::shared_ptr<double[]>(new double[g.n]);
-    auto d = boost::shared_ptr<double[]>(new double[g.n]);
-    auto del = boost::shared_ptr<double[]>(new double[g.n]);
-    auto S = boost::shared_ptr<VERT_T []>(new VERT_T[g.n]);
-
-    typedef std::vector<VERT_T> array_list;
-    typedef std::shared_ptr<array_list> array_list_ptr;
-    typedef std::vector<array_list_ptr> dyn_list;
-    dyn_list P;
-    for(int i = 0; i < g.n; ++i){
-        P.push_back(array_list_ptr(new array_list()));
-        d[i] = -1;
-        del[i] = 0;
-        bc[i] = 0;
+    paragroup pinit;
+    ff::mutex m;
+    pinit.for_each(0, g.n, [&srcs, &bc, &bcs, &m](int i){
         srcs[i] = i;
-    }
-    //permute srcs
+        bc[i] = 0;
+        m.lock();
+        bcs.push_back(fake_bc_ptr(new ff::accumulator<DOUBLE_T>(0, [](const DOUBLE_T & x, const DOUBLE_T & y){return x + y;})));
+        m.unlock();
+    });
+
+    ff_wait(all(pinit));
     for(int i = 0; i < g.n; ++i)
     {
         int j = g.n * sprng(sprng_stream);
@@ -57,7 +55,7 @@ boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
     }
 
 
-////////////////
+    std::vector<VERT_T> to_traverse_verts;
     int num_traversals = 0;
     for (int p=0; p<g.n; p++) {
         int i = srcs[p];
@@ -70,10 +68,26 @@ boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
         if (num_traversals == numV + 1) {
             break;
         }
+        to_traverse_verts.push_back(i);
+    }
+    ff::paragroup pg;
+    pg.for_each(to_traverse_verts.begin(), to_traverse_verts.end(), [&g, &bcs](VERT_T i){
+        thread_local static auto sig = boost::shared_ptr<double[]>(new double[g.n]);
+        thread_local static auto d = boost::shared_ptr<double[]>(new double[g.n]);
+        thread_local static auto del = boost::shared_ptr<double[]>(new double[g.n]);
+        thread_local static auto S = boost::shared_ptr<VERT_T []>(new VERT_T[g.n]);
+        typedef std::vector<VERT_T> array_list;
+        typedef std::shared_ptr<array_list> array_list_ptr;
+        typedef std::vector<array_list_ptr> dyn_list;
+        thread_local static dyn_list P;
+        for(int i = 0; i < g.n; ++i){
+            P.push_back(array_list_ptr(new array_list()));
+            d[i] = -1;
+            del[i] = 0;
+        }
 
-        start = 0;
+        LONG_T start = 0, end = 1;
         S[0] = i;
-        end = 1;
         sig[i] = 1;
         d[i] = 0;
         while (end - start > 0)
@@ -110,7 +124,7 @@ boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
             {
                 del[v] = del[v] + sig[v] * (1 + del[w])/sig[w];
             }
-            bc[w] += del[w];
+            bcs[w]->increase(del[w]);
         }
         for (LONG_T j=end-1; j>=0; j--)
         {
@@ -119,16 +133,19 @@ boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
             del[v] = 0;
             P[v]->clear();
         }
-        /*
-        time_point<system_clock> tiny_time4 = system_clock::now();
-        std::cout<<"time\t"<<duration_cast<microseconds>(tiny_time2-tiny_time1).count()
-                   <<"\t"<<duration_cast<microseconds>(tiny_time3-tiny_time2).count()
-                     <<"\t"<<duration_cast<microseconds>(tiny_time4-tiny_time3).count()<<std::endl;
-                     */
-    }
+    });
+
+    ff::ff_wait(all(pg));
+
+    ff::paragroup preduceresults;
+    preduceresults.for_each(0, g.n, [&bc, &bcs](int i){
+        bc[i] = bcs[i]->get();
+    });
+    ff::ff_wait(all(preduceresults));
     time_end = system_clock::now();
     ////////////////////////
     auto elapsed_time = duration_cast<microseconds>(time_end-time_start).count();
-    std::cout<<"seq_get_bc elapsed_time : "<<elapsed_time<<std::endl;
+    std::cout<<"ff_get_bc elapsed_time : "<<elapsed_time<<std::endl;
     return bc;
 }
+

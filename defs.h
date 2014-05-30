@@ -46,11 +46,11 @@ struct plist
 
 
 graph read_data(const std::string & fp);
-double betweennessCentrality(graph* G, DOUBLE_T* BC);
+//double betweennessCentrality(graph* G, DOUBLE_T* BC);
 
 //return BC
 boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g);
-
+boost::shared_ptr<DOUBLE_T[]>  ff_get_bc(graph g);
 
 void prefix_sums(LONG_T*, LONG_T*, LONG_T*, LONG_T);
 

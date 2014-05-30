@@ -10,7 +10,10 @@ int main(int argc, char *argv[])
     std::cout<<"k4approx: "<<g.k4approx<<std::endl;
 
 
+    //auto bc = seq_get_bc(g);
     auto bc = seq_get_bc(g);
+    bc = ff_get_bc(g);
+
     //auto bc = boost::shared_ptr<DOUBLE_T[]>(new DOUBLE_T[g.n]);
     //betweennessCentrality(&g, bc.get());
     double sum1 = 0;

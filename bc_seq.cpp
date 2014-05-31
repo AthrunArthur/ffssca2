@@ -14,7 +14,8 @@ boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
     int nthreads = 1;
     int * sprng_stream;
 
-    auto bc = boost::shared_ptr<DOUBLE_T[]>(new DOUBLE_T[g.n]);
+    auto bc_m = boost::shared_ptr<DOUBLE_T[]>(new DOUBLE_T[g.n]);
+    auto bc = bc_m.get();
 
 
     scope_guard __f1([&sprng_stream, tid, nthreads, seed](){
@@ -29,11 +30,21 @@ boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
 
     int numV = 1<<g.k4approx;
     LONG_T start, end;
-    auto srcs = boost::shared_ptr<LONG_T[]>(new LONG_T[g.n]);
-    auto sig = boost::shared_ptr<double[]>(new double[g.n]);
-    auto d = boost::shared_ptr<double[]>(new double[g.n]);
-    auto del = boost::shared_ptr<double[]>(new double[g.n]);
-    auto S = boost::shared_ptr<VERT_T []>(new VERT_T[g.n]);
+
+    auto srcs_m = boost::shared_ptr<LONG_T[]>(new LONG_T[g.n]);
+    auto sig_m = boost::shared_ptr<double[]>(new double[g.n]);
+    auto d_m = boost::shared_ptr<double[]>(new double[g.n]);
+    auto del_m = boost::shared_ptr<double[]>(new double[g.n]);
+    auto S_m = boost::shared_ptr<VERT_T []>(new VERT_T[g.n]);
+
+    auto srcs = srcs_m.get();
+    auto sig = sig_m.get();
+    auto d = d_m.get();
+    auto del = del_m.get();
+    auto S = S_m.get();
+    auto g_numEdges = g.numEdges.get();
+    auto g_weight = g.weight.get();
+    auto g_endV = g.endV.get();
 
     typedef std::vector<VERT_T> array_list;
     typedef std::shared_ptr<array_list> array_list_ptr;
@@ -61,7 +72,7 @@ boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
     int num_traversals = 0;
     for (int p=0; p<g.n; p++) {
         int i = srcs[p];
-        if (g.numEdges[i+1] - g.numEdges[i] == 0) {
+        if (g_numEdges[i+1] - g_numEdges[i] == 0) {
             continue;
         } else {
             num_traversals++;
@@ -81,11 +92,11 @@ boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
             int v = S[start];
 
             //std::cout<<"edges start from "<< v<<std::endl;
-            for(int j = g.numEdges[v]; j<g.numEdges[v+1]; j++)
+            for(int j = g_numEdges[v]; j<g_numEdges[v+1]; j++)
             {
-                if ((g.weight[j] & 7) == 0)
+                if ((g_weight[j] & 7) == 0)
                     continue;
-                int w = g.endV[j];
+                int w = g_endV[j];
                 //std::cout<<"\t"<<w<<std::endl;
                 if(v!= w){
                     if(d[w] < 0){
@@ -130,5 +141,5 @@ boost::shared_ptr<DOUBLE_T[]>  seq_get_bc(graph g)
     ////////////////////////
     auto elapsed_time = duration_cast<microseconds>(time_end-time_start).count();
     std::cout<<"seq_get_bc elapsed_time : "<<elapsed_time<<std::endl;
-    return bc;
+    return bc_m;
 }

@@ -16,7 +16,8 @@ boost::shared_ptr<DOUBLE_T[]>  ff_get_bc(graph g)
     int nthreads = 1;
     int * sprng_stream;
 
-    auto bc = boost::shared_ptr<DOUBLE_T[]>(new DOUBLE_T[g.n]);
+    auto bc_m = boost::shared_ptr<DOUBLE_T[]>(new DOUBLE_T[g.n]);
+    auto bc = bc_m.get();
 
 
     scope_guard __f1([&sprng_stream, tid, nthreads, seed](){
@@ -25,7 +26,9 @@ boost::shared_ptr<DOUBLE_T[]>  ff_get_bc(graph g)
         free(sprng_stream);
     });
 
-    std::cout<<"fuck 0"<<std::endl;
+    ff::para<> f;
+    f([](){});
+
     using namespace std::chrono;
     time_point<system_clock> time_start, time_end;
     time_start = system_clock::now();
@@ -33,33 +36,27 @@ boost::shared_ptr<DOUBLE_T[]>  ff_get_bc(graph g)
     int numV = 1<<g.k4approx;
     typedef boost::shared_ptr<ff::accumulator<DOUBLE_T> > fake_bc_ptr;
     std::vector<fake_bc_ptr> bcs;
-    auto srcs = boost::shared_ptr<LONG_T[]>(new LONG_T[g.n]);
+    auto srcs_m = boost::shared_ptr<LONG_T[]>(new LONG_T[g.n]);
+    auto srcs = srcs_m.get();
+
     paragroup pinit;
     ff::mutex m;
-    pinit.for_each(0, g.n, [&srcs, &bc, &bcs, &m](int i){
-        srcs[i] = i;
+    pinit.for_each(0, g.n, [&srcs, &bc, &bcs, &m, &g, &sprng_stream](int i){
+        srcs[i] = g.n * sprng(sprng_stream);
         bc[i] = 0;
         m.lock();
         bcs.push_back(fake_bc_ptr(new ff::accumulator<DOUBLE_T>(0, [](const DOUBLE_T & x, const DOUBLE_T & y){return x + y;})));
         m.unlock();
     });
 
-    ff_wait(all(pinit));
-    for(int i = 0; i < g.n; ++i)
-    {
-        int j = g.n * sprng(sprng_stream);
-        if (i != j)
-        {
-            std::swap(srcs[i], srcs[j]);
-        }
-    }
 
 
     std::vector<VERT_T> to_traverse_verts;
     int num_traversals = 0;
+    auto g_numEdges = g.numEdges.get();
     for (int p=0; p<g.n; p++) {
         int i = srcs[p];
-        if (g.numEdges[i+1] - g.numEdges[i] == 0) {
+        if (g_numEdges[i+1] - g_numEdges[i] == 0) {
             continue;
         } else {
             num_traversals++;
@@ -70,16 +67,26 @@ boost::shared_ptr<DOUBLE_T[]>  ff_get_bc(graph g)
         }
         to_traverse_verts.push_back(i);
     }
+    ff_wait(all(pinit));
     ff::paragroup pg;
     pg.for_each(to_traverse_verts.begin(), to_traverse_verts.end(), [&g, &bcs](VERT_T i){
-        thread_local static auto sig = boost::shared_ptr<double[]>(new double[g.n]);
-        thread_local static auto d = boost::shared_ptr<double[]>(new double[g.n]);
-        thread_local static auto del = boost::shared_ptr<double[]>(new double[g.n]);
-        thread_local static auto S = boost::shared_ptr<VERT_T []>(new VERT_T[g.n]);
+        thread_local static auto sig_m = boost::shared_ptr<double[]>(new double[g.n]);
+        thread_local static auto d_m = boost::shared_ptr<double[]>(new double[g.n]);
+        thread_local static auto del_m = boost::shared_ptr<double[]>(new double[g.n]);
+        thread_local static auto S_m = boost::shared_ptr<VERT_T []>(new VERT_T[g.n]);
         typedef std::vector<VERT_T> array_list;
         typedef std::shared_ptr<array_list> array_list_ptr;
         typedef std::vector<array_list_ptr> dyn_list;
         thread_local static dyn_list P;
+
+        thread_local static auto sig = sig_m.get();
+        thread_local static auto d = d_m.get();
+        thread_local static auto del = del_m.get();
+        thread_local static auto S = S_m.get();
+        thread_local static auto g_numEdges = g.numEdges.get();
+        thread_local static auto g_weight = g.weight.get();
+        thread_local static auto g_endV = g.endV.get();
+
         for(int i = 0; i < g.n; ++i){
             P.push_back(array_list_ptr(new array_list()));
             d[i] = -1;
@@ -95,11 +102,11 @@ boost::shared_ptr<DOUBLE_T[]>  ff_get_bc(graph g)
             int v = S[start];
 
             //std::cout<<"edges start from "<< v<<std::endl;
-            for(int j = g.numEdges[v]; j<g.numEdges[v+1]; j++)
+            for(int j = g_numEdges[v]; j<g_numEdges[v+1]; j++)
             {
-                if ((g.weight[j] & 7) == 0)
+                if ((g_weight[j] & 7) == 0)
                     continue;
-                int w = g.endV[j];
+                int w = g_endV[j];
                 //std::cout<<"\t"<<w<<std::endl;
                 if(v!= w){
                     if(d[w] < 0){
@@ -146,6 +153,6 @@ boost::shared_ptr<DOUBLE_T[]>  ff_get_bc(graph g)
     ////////////////////////
     auto elapsed_time = duration_cast<microseconds>(time_end-time_start).count();
     std::cout<<"ff_get_bc elapsed_time : "<<elapsed_time<<std::endl;
-    return bc;
+    return bc_m;
 }
 

@@ -17,12 +17,19 @@ bc_ff.cpp
 add_definitions(-DUSING_FF_NONBLOCKING_QUEUE)
 
 include_directories(${PROJECT_SOURCE_DIR}/sprng2.0/include
- ${PROJECT_SOURCE_DIR}/../functionflow/ff/include/)
+ ${PROJECT_SOURCE_DIR}/../ff/include/)
+ #${PROJECT_SOURCE_DIR}/../functionflow/ff/include/)
 link_directories(${PROJECT_SOURCE_DIR}/sprng2.0/lib
- ${PROJECT_SOURCE_DIR}/../functionflow/bin)
+ ${PROJECT_SOURCE_DIR}/../bin)
+ #${PROJECT_SOURCE_DIR}/../functionflow/bin)
 
 set(sprng_lib sprng m)
 set(ff_lib ff pthread)
+
+if(CACHE_EVAL)
+  add_definitions(-DCACHE_EVAL)
+  set(ff_lib ff pthread papi)
+endif(CACHE_EVAL)
 
 add_executable(${PROJECT_NAME} ${src})
 target_link_libraries(${PROJECT_NAME} ${sprng_lib} ${ff_lib})
